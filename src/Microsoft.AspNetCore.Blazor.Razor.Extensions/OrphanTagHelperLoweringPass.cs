@@ -39,226 +39,69 @@ namespace Microsoft.AspNetCore.Blazor.Razor
                 var reference = visitor.References[i];
                 var tagHelperNode = (TagHelperIntermediateNode)reference.Node;
 
-                // Since this is converted from a tag helper to a regular old HTMl element, we need to 
+                // Since this is converted from a tag helper to a regular old HTML element, we need to 
                 // flatten out the structure
-                var insert = new List<IntermediateNode>();
-                insert.Add(new HtmlContentIntermediateNode()
+                var element = new HtmlElementIntermediateNode()
                 {
-                    Children =
-                    {
-                        new IntermediateToken()
-                        {
-                            Content = "<" + tagHelperNode.TagName + " ",
-                            Kind = TokenKind.Html,
-                        }
-                    },
-                });
+                    TagName = tagHelperNode.TagName,
+                };
 
                 for (var j = 0; j < tagHelperNode.Diagnostics.Count; j++)
                 {
-                    insert[0].Diagnostics.Add(tagHelperNode.Diagnostics[j]);
+                    element.Diagnostics.Add(tagHelperNode.Diagnostics[j]);
                 }
 
                 // We expect to see a body node, followed by a series of property/attribute nodes
                 // This isn't really the order we want, so skip over the body for now, and we'll do another
                 // pass that merges it in.
+                TagHelperBodyIntermediateNode body = null;
                 for (var j = 0; j < tagHelperNode.Children.Count; j++)
                 {
                     if (tagHelperNode.Children[j] is TagHelperBodyIntermediateNode)
                     {
+                        body = (TagHelperBodyIntermediateNode)tagHelperNode.Children[j];
                         continue;
                     }
                     else if (tagHelperNode.Children[j] is TagHelperHtmlAttributeIntermediateNode htmlAttribute)
                     {
-                        if (htmlAttribute.Children.Count == 0)
-                        {
-                            RewriteEmptyAttributeContent(insert, htmlAttribute);
-                        }
-                        else if (htmlAttribute.Children[0] is HtmlContentIntermediateNode)
-                        {
-                            RewriteHtmlAttributeContent(insert, htmlAttribute);
-                        }
-                        else if (htmlAttribute.Children[0] is CSharpExpressionAttributeValueIntermediateNode csharpContent)
-                        {
-                            RewriteCSharpAttributeContent(insert, htmlAttribute);
-                        }
-                    }
-                    else if (tagHelperNode.Children[j] is ComponentAttributeExtensionNode attributeNode)
-                    {
-                        RewriteComponentAttributeContent(insert, attributeNode);
+                        element.Children.Add(RewriteTagHelperHtmlAttribute(htmlAttribute));
                     }
                     else
                     {
                         // We shouldn't see anything else here, but just in case, add the content as-is.
-                        insert.Add(tagHelperNode.Children[j]);
+                        element.Children.Add(tagHelperNode.Children[j]);
                     }
                 }
 
-                if (tagHelperNode.TagMode == TagMode.SelfClosing)
+                for (var j = 0; j < body.Children.Count; j++)
                 {
-                    insert.Add(new HtmlContentIntermediateNode()
-                    {
-                        Children =
-                        {
-                            new IntermediateToken()
-                            {
-                                Content = "/>",
-                                Kind = TokenKind.Html,
-                            }
-                        }
-                    });
-                }
-                else if (tagHelperNode.TagMode == TagMode.StartTagOnly)
-                {
-                    insert.Add(new HtmlContentIntermediateNode()
-                    {
-                        Children =
-                        {
-                            new IntermediateToken()
-                            {
-                                Content = ">",
-                                Kind = TokenKind.Html,
-                            }
-                        }
-                    });
-                }
-                else
-                {
-                    insert.Add(new HtmlContentIntermediateNode()
-                    {
-                        Children =
-                        {
-                            new IntermediateToken()
-                            {
-                                Content = ">",
-                                Kind = TokenKind.Html,
-                            }
-                        }
-                    });
-
-                    for (var j = 0; j < tagHelperNode.Children.Count; j++)
-                    {
-                        if (tagHelperNode.Children[j] is TagHelperBodyIntermediateNode bodyNode)
-                        {
-                            insert.AddRange(bodyNode.Children);
-                        }
-                    }
-
-                    insert.Add(new HtmlContentIntermediateNode()
-                    {
-                        Children =
-                        {
-                            new IntermediateToken()
-                            {
-                                Content = "</" + tagHelperNode.TagName + ">",
-                                Kind = TokenKind.Html,
-                            }
-                        }
-                    });
+                    element.Children.Add(body.Children[j]);
                 }
 
-                reference.InsertAfter(insert);
+                reference.InsertAfter(element);
                 reference.Remove();
             }
         }
-        private static void RewriteEmptyAttributeContent(List<IntermediateNode> nodes, TagHelperHtmlAttributeIntermediateNode node)
+
+        private IntermediateNode RewriteTagHelperHtmlAttribute(TagHelperHtmlAttributeIntermediateNode attribute)
         {
-            nodes.Add(new HtmlContentIntermediateNode()
+            var node = new HtmlAttributeIntermediateNode()
             {
-                Children =
-                {
-                    new IntermediateToken()
-                    {
-                        Content = node.AttributeName + " ",
-                        Kind = TokenKind.Html,
-                    }
-                }
-            });
-        }
-
-        private static void RewriteHtmlAttributeContent(List<IntermediateNode> nodes, TagHelperHtmlAttributeIntermediateNode node)
-        {
-            switch (node.AttributeStructure)
-            {
-                case AttributeStructure.Minimized:
-                    nodes.Add(new HtmlContentIntermediateNode()
-                    {
-                        Children =
-                        {
-                            new IntermediateToken()
-                            {
-                                Content = node.AttributeName + " ",
-                                Kind = TokenKind.Html,
-                            }
-                        }
-                    });
-                    break;
-
-                // Blazor doesn't really care about preserving the fidelity of the attributes.
-                case AttributeStructure.NoQuotes:
-                case AttributeStructure.SingleQuotes:
-                case AttributeStructure.DoubleQuotes:
-
-                    var htmlNode = new HtmlContentIntermediateNode();
-                    nodes.Add(htmlNode);
-
-                    htmlNode.Children.Add(new IntermediateToken()
-                    {
-                        Content = node.AttributeName + "=\"",
-                        Kind = TokenKind.Html,
-                    });
-                    
-                    for (var i = 0; i < node.Children[0].Children.Count; i++)
-                    {
-                        htmlNode.Children.Add(node.Children[0].Children[i]);
-                    }
-
-                    htmlNode.Children.Add(new IntermediateToken()
-                    {
-                        Content = "\" ",
-                        Kind = TokenKind.Html,
-                    });
-
-                    break;
-            }
-        }
-
-        private static void RewriteCSharpAttributeContent(List<IntermediateNode> nodes, TagHelperHtmlAttributeIntermediateNode node)
-        {
-            var attributeNode = new HtmlAttributeIntermediateNode()
-            {
-                AttributeName = node.AttributeName,
-                Prefix = "=\"",
-                Suffix = "\"",
+                AttributeName = attribute.AttributeName,
+                Source = attribute.Source,
             };
-            nodes.Add(attributeNode);
 
-            var valueNode = new CSharpExpressionAttributeValueIntermediateNode();
-            attributeNode.Children.Add(valueNode);
-
-            for (var i = 0; i < node.Children[0].Children.Count; i++)
+            for (var i = 0; i < attribute.Children.Count; i++)
             {
-                valueNode.Children.Add(node.Children[0].Children[i]);
+                node.Children.Add(attribute.Children[i]);
             }
-        }
 
-        private void RewriteComponentAttributeContent(List<IntermediateNode> nodes, ComponentAttributeExtensionNode node)
-        {
-            var attributeNode = new HtmlAttributeIntermediateNode()
+            for (var i = 0; i < attribute.Diagnostics.Count; i++)
             {
-                AttributeName = node.AttributeName,
-                Prefix = "=\"",
-                Suffix = "\"",
-            };
-            nodes.Add(attributeNode);
-
-            var valueNode = new CSharpExpressionAttributeValueIntermediateNode();
-            attributeNode.Children.Add(valueNode);
-
-            for (var i = 0; i < node.Children[0].Children.Count; i++)
-            {
-                valueNode.Children.Add(node.Children[0].Children[i]);
+                node.Diagnostics.Add(attribute.Diagnostics[i]);
             }
+
+            return node;
         }
 
         private class Visitor : IntermediateNodeWalker

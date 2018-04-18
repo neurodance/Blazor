@@ -30,25 +30,6 @@ namespace Microsoft.AspNetCore.Blazor.Razor
             return diagnostic;
         }
 
-        public static readonly RazorDiagnosticDescriptor ExpressionInAttributeList =
-            new RazorDiagnosticDescriptor(
-            "BL9980",
-            () =>
-                "Expressions like '{0}' inside of a tag must be part of an attribute. " +
-                "Previous releases of Blazor supported constructs like '@onclick(...)' or '@bind(...)'." +
-                "These features have been changed to use attribute syntax. " +
-                "Use 'onclick=\"@...\"' or 'bind=\"...\" respectively.",
-            RazorDiagnosticSeverity.Error);
-
-        public static RazorDiagnostic Create_ExpressionInAttributeList(SourceSpan? source, string expression)
-        {
-            var diagnostic = RazorDiagnostic.Create(
-                ExpressionInAttributeList,
-                source ?? SourceSpan.Undefined,
-                expression);
-            return diagnostic;
-        }
-
         public static readonly RazorDiagnosticDescriptor UnexpectedClosingTag = new RazorDiagnosticDescriptor(
             "BL9981",
             () => "Unexpected closing tag '{0}' with no matching start tag.",

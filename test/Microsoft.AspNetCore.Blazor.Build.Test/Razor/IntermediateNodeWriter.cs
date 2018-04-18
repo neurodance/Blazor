@@ -14,6 +14,7 @@ namespace Microsoft.AspNetCore.Razor.Language.IntegrationTests
     // Serializes single IR nodes (shallow).
     public class IntermediateNodeWriter :
         IntermediateNodeVisitor,
+        IExtensionIntermediateNodeVisitor<HtmlElementIntermediateNode>,
         IExtensionIntermediateNodeVisitor<ComponentAttributeExtensionNode>,
         IExtensionIntermediateNodeVisitor<ComponentBodyExtensionNode>,
         IExtensionIntermediateNodeVisitor<ComponentCloseExtensionNode>,
@@ -262,6 +263,11 @@ namespace Microsoft.AspNetCore.Razor.Language.IntegrationTests
             // newline cannot be platform specific so we need to drop the windows \r.
             // Also, escape our separator so we can search for ` - `to find delimiters.
             _writer.Write(content.Replace("\r", string.Empty).Replace("\n", "\\n").Replace(" - ", "\\-"));
+        }
+
+        void IExtensionIntermediateNodeVisitor<HtmlElementIntermediateNode>.VisitExtension(HtmlElementIntermediateNode node)
+        {
+            WriteContentNode(node, node.TagName);
         }
 
         void IExtensionIntermediateNodeVisitor<ComponentOpenExtensionNode>.VisitExtension(ComponentOpenExtensionNode node)
